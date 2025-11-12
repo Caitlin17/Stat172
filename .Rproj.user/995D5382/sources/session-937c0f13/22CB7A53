@@ -1,9 +1,9 @@
 {
     "id": "22CB7A53",
-    "path": "~/GitHub/Stat172/Final.R",
-    "project_path": "Final.R",
+    "path": "~/GitHub/Stat172/Final_Data_Cleaning.R",
+    "project_path": "Final_Data_Cleaning.R",
     "type": "r_source",
-    "hash": "0",
+    "hash": "2939358202",
     "contents": "",
     "dirty": false,
     "created": 1762965292656.0,
@@ -16,11 +16,11 @@
         "scrollLine": "0"
     },
     "folds": "",
-    "lastKnownWriteTime": 1762965111,
+    "lastKnownWriteTime": 1762965482,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1762965111,
+    "last_content_update": 1762965482,
     "read_only": false,
     "read_only_alternatives": []
 }
