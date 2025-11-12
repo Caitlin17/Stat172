@@ -1,0 +1,270 @@
+# Good practice : start by cleaning your environment
+rm(list = ls())
+
+# We already "installed" packages - only have to do this once: 
+install.packages("rpart")
+install.packages("rpart.plot")
+install.packages("tidyverse")
+install.packages("pROC")
+
+#each time you must load packages
+library(rpart) #classification trees
+library(rpart.plot) #make pretty trees
+library(tidyverse)
+library(pROC)
+
+#read in our data
+cdata <- read.csv("172 Data/tennis.csv", stringsAsFactors = TRUE)
+#next step: DO NOT EVER ATTACH DATA
+
+head(cdata)
+str(cdata)
+
+#Exploratory analysis --------
+
+# % 1st serve in (numeric) ---> Histogram
+ggplot(data = cdata) +
+  geom_histogram(aes(x = X1stIn))
+
+# ace rate (numeric) ----> Histogram
+ggplot(data = cdata) +
+  geom_histogram(aes(x = A.))
+
+# Surface (factor)---> bar chart
+ggplot(data = cdata) +
+  geom_bar(aes(x = Surface))
+
+table(cdata$Surface)
+
+#What does the Y variable look like? (result --> factor)
+ggplot(data = cdata) +
+  geom_bar(aes(x = Result))
+#Very imbalanced - she wins much more than she loses
+#this is great - she wins a lot
+
+# is to connect the probability of winning to gameplay
+#characteristics so we can predict wins
+
+# -- Multivariate plots of x variable and y variable
+
+#Show stacked counts of wins and losses for each value of X1stIn
+#that is, across % of first serves in, visualize how many wins and losses
+#Note our X variable is numeric and our y variable is binary
+ggplot(data = cdata) +
+  geom_histogram(aes(x = X1stIn, fill = Result), position = "fill")
+
+#do something similar for surface
+ggplot(data = cdata) +
+  geom_bar(aes(x = Surface, fill = Result), position = "fill")
+
+#Serena's performance over time, but let's polish it this time
+ggplot(data = cdata) +
+  geom_histogram(aes(x = year, fill = Result), position = "fill", binwidth = 1) +
+  ggtitle("Serena Williams: Wins over Time") + 
+  labs(x = "Year", y = "Proportion") +
+  scale_fill_grey("Serena's\nOutcome") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+
+#Do the same for ace rate - remember to play with binwidth
+ggplot(data = cdata) +
+  geom_histogram(aes(x = 100*A., fill = Result), position = "fill", binwidth = 5.2) +
+  ggtitle("Serena Williams: Wins by Ace Rate") + 
+  labs(x = "Ace  Rate (%)", y = "Proportion") +
+  scale_fill_grey("Serena's\nOutcome") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+#More multivariate plots - what if we want to explore
+#2 x variables simultaneously in how they affect y?
+
+#for example, look at proportion of wins by surface, depending on whether she has a higher rank or not
+
+ggplot(data = cdata) +
+  geom_bar(aes(x = Surface, fill = Result), position = "fill") +
+  facet_wrap(~Higher.Rank.) +
+  ggtitle("Effect of Surface, Opponent Rank") + 
+  labs(x = "Surface", y = "Proportion") +
+  scale_fill_grey("Serena's\nOutcome") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+#what if we have 2 numeric x variables??
+ggplot(data = cdata) +
+  geom_point(aes(x = X1st., y = X2nd., color = Result)) +
+  ggtitle("Effect of Surface, Opponent Rank") + 
+  labs(x = "First Serve Proportion", y = "Second Serve Proportion") +
+  scale_color_grey("Serena's\nOutcome") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+#end of exploratory analysis
+
+  
+###---DATA PREPARATION-----
+
+#set the seed - this means we still get random numbers, but we all get the SAME random numbers
+
+RNGkind(sample.kind = "default") #just for classroom...... different R Versions
+set.seed(2291352) #actual numbers aren't important
+#create a vector or 'row indices' - these are randomly selected row numbers
+#that will be put into our training data
+train.idx <- sample(x = 1:nrow(cdata), size = 0.8 * nrow(cdata))
+
+#in console look at head of train
+
+#Create training data
+train.df <- cdata[train.idx, ]
+#create Testing Data
+test.df <- cdata[-train.idx,]
+
+
+###------- Tree Fitting --------
+set.seed(172172172) #actual numbers aren't important
+ctree <- rpart(Result ~ Higher.Rank. + A. + DF. + Rd + 
+                 X1stIn + X1st. + X2nd. + Surface + Rk  +
+                 vRk + month + year,
+               data = train.df,
+               method = 'class')
+
+#An alternative syntax is as follows:
+ctree <- rpart(Result ~ .,   #Assumes you want ALL OTHER COLUMNS AS PREDICTORS. NOT always good
+               data = train.df,
+               method = 'class')
+
+#look art the object ctree
+ctree
+
+#Plot our tree
+rpart.plot(ctree)
+levels(train.df$Result)
+
+
+#### -------TUNE OUR TREE------------------
+
+#R gave us a default tree
+#it wasn't grown to the fullest extent
+#R tuned it by it's own metrucs
+#We want to use Cross validation to maybe do better
+#by minimizing out of sample error
+
+printcp(ctree)
+#each row is a sub tree and goes from smallest(first row) to biggest (last row)
+#DO look at xerror: this estimates error on NEW Data using cross validation
+#DON'T look at rel error: this is sample error
+#DO aim to minimize xerror
+#note: the smallest xerror is the biggest tree R BOTHERED TO FIT
+#This should bother us - what if a bigger treee results in a better fit???
+
+#GOOD PRACTICE: always start by growing a gian tree and pruning it back
+
+set.seed(172172172)
+ctree <- rpart(Result ~ .,  
+               data = train.df,
+               method = 'class',
+               control = rpart.control(cp = 0.0001, minsplit = 1))
+rpart.plot(ctree) #clearly unhelpful
+printcp(ctree)
+#We like tree 5 with 12 splits
+
+#Automatically/reporducibly grab the optimal cp number
+#that is - grab the cp that corresponds to the smallest xerror
+
+optimalcp <- ctree$cptable[which.min(ctree$cptable[,"xerror"]), "CP"]
+
+ctree2 <- prune(ctree, cp = optimalcp)
+
+#ctree2 is our final (tuned) tree
+rpart.plot(ctree2)
+
+
+### ------- MODEL VALIDATION + PREDICTION ---------
+
+#make column of predictions based on pruned tree
+#do this in the test dataset so we can see how well we do
+#on truly new data
+
+test.df$result_pred <- predict(ctree2, test.df, type = "class")
+
+#in console View(test.df)
+
+table(test.df$result_pred, test.df$Result)
+
+#accuracy: (9+95)/(9+10+5+95)
+
+#Get pi-hats: pick out the probabilities of "W"s
+# Recall W is the positive event
+pi_hat <- predict(ctree2, test.df, type = "prob")[,"W"]
+
+#how well do we predict with the model on test data?
+#if cutoff p = 0.10
+
+p <- 0.10
+y_hat <- as.factor(ifelse(pi_hat > p, "W", "L"))
+#make new confusion matrix based on pi* = 0.1
+table(y_hat, test.df$Result)
+
+#sensitivity: 96/(96+9) = 0.9142857
+#specificity: 9/(9+5) = 0.6428571
+
+#if cutoff p = 0.5
+p<- 0.50
+y_hat <- as.factor(ifelse(pi_hat > p, "W", "L"))
+table(y_hat, test.df$Result)
+
+#sensitivity:  = 0.9048
+#specificity:  = 0.63
+
+#if cutoff p = 0.9
+p<- 0.9
+y_hat <- as.factor(ifelse(pi_hat > p, "W", "L"))
+table(y_hat, test.df$Result)
+
+#sensitivity:  95/(10+95) = 0.9048
+#specificity:  12/(12+2) = 0.8571
+
+#You will always see a trade-off between sens, and spec, as pi* shifts.
+#Ideally, we look at sensitivity, specificity for ALL possible
+#cutoff values... but this would be awfully tedious using the above method
+#-> enter ROC curve
+
+
+#ROC curve
+#must be aware of positive event
+rocCurve <- roc(response = test.df$Result, #supply truth in test set
+                predictor = pi_hat, #supply predicted probabilities of positive case
+                levels = c("L", "W") #negative, positive
+)
+#plot basic ROC curve
+plot(rocCurve, print.thres = "all", print.auc = TRUE)
+#printing threshold results, key: pi* (spec, sens)
+#print.thres = TRUE: threshold with highest sens + spec displayed
+#print.thres = "all": all thresholds
+
+#in industry you might present:
+plot(rocCurve, print.thres = TRUE, print.auc = TRUE)
+#simple and informative
+
+#if we set pi* = 0.861, we can achieve a specificity of 0.857
+# and sensitivity of 0.905
+
+#that is, we'll predict a loss 85.7% of the time when Serena actually loses
+#We'll predict a win 90.5% of the time when Serena actually wins
+#are under the curve is 0.928
+
+#obtain predictions consistent with the above promises
+pi_star <- coords(rocCurve, "best", ret = "threshold")$threshold[1]
+test.df$result_pred <- as.factor(ifelse(pi_hat > pi_star, "W", "L"))
+
+
+
+
+
+
+
+
+
+
+
+
+
